@@ -13,6 +13,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from wordcloud import WordCloud
+import pickle
+import os
 
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
@@ -20,14 +22,16 @@ nltk.download('punkt')
 nltk.download('stopwords')
 nltk.download('wordnet')
 
-train_file_path = './dataset/train.csv'
-test_file_path = './dataset/test.csv'
-train_data = pd.read_csv(train_file_path)
-test_data = pd.read_csv(test_file_path)
-
-train_data.dropna(subset=['tweets', 'class'], inplace=True)
-test_data.dropna(subset=['tweets'], inplace=True)
-combined_data = pd.concat([train_data.assign(dataset='train'), test_data.assign(dataset='test')])
+# Define paths for pickle files
+PICKLE_DIR = './pickle_files'
+os.makedirs(PICKLE_DIR, exist_ok=True)
+TRAIN_DATA_PICKLE = os.path.join(PICKLE_DIR, 'train_data.pkl')
+TEST_DATA_PICKLE = os.path.join(PICKLE_DIR, 'test_data.pkl')
+VECTORIZER_PICKLE = os.path.join(PICKLE_DIR, 'vectorizer.pkl')
+MODEL_PICKLE = os.path.join(PICKLE_DIR, 'model.pkl')
+XVAL_PICKLE = os.path.join(PICKLE_DIR, 'X_val.pkl')
+YVAL_PICKLE = os.path.join(PICKLE_DIR, 'y_val.pkl')
+XVALTFIDF_PICKLE = os.path.join(PICKLE_DIR, 'X_val_tfidf.pkl')
 
 def preprocess_text(text):
     if isinstance(text, str):
@@ -41,17 +45,66 @@ def preprocess_text(text):
         return ' '.join(tokens)
     return
 
-train_data['processed_tweets'] = train_data['tweets'].apply(preprocess_text)
-test_data['processed_tweets'] = test_data['tweets'].apply(preprocess_text)
+# Check if preprocessed data exists
+if os.path.exists(TRAIN_DATA_PICKLE) and os.path.exists(TEST_DATA_PICKLE) and \
+   os.path.exists(VECTORIZER_PICKLE) and os.path.exists(MODEL_PICKLE) and \
+   os.path.exists(XVAL_PICKLE) and os.path.exists(YVAL_PICKLE) and os.path.exists(XVALTFIDF_PICKLE):
+    # Load preprocessed data
+    with open(TRAIN_DATA_PICKLE, 'rb') as f:
+        train_data = pickle.load(f)
+    with open(TEST_DATA_PICKLE, 'rb') as f:
+        test_data = pickle.load(f)
+    with open(VECTORIZER_PICKLE, 'rb') as f:
+        vectorizer = pickle.load(f)
+    with open(MODEL_PICKLE, 'rb') as f:
+        model = pickle.load(f)
+    with open(XVAL_PICKLE, 'rb') as f:
+        X_val = pickle.load(f)
+    with open(YVAL_PICKLE, 'rb') as f:
+        y_val = pickle.load(f)
+    with open(XVALTFIDF_PICKLE, 'rb') as f:
+        X_val_tfidf = pickle.load(f)
+else:
+    # Load and preprocess data
+    train_file_path = './dataset/train.csv'
+    test_file_path = './dataset/test.csv'
+    train_data = pd.read_csv(train_file_path)
+    test_data = pd.read_csv(test_file_path)
 
-X = train_data['tweets']
-y = train_data['class']
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2), max_features=5000)
-X_train_tfidf = vectorizer.fit_transform(X_train)
-X_val_tfidf = vectorizer.transform(X_val)
-model = LogisticRegression(max_iter=1000)
-model.fit(X_train_tfidf, y_train)
+    train_data.dropna(subset=['tweets', 'class'], inplace=True)
+    test_data.dropna(subset=['tweets'], inplace=True)
+    
+    train_data['processed_tweets'] = train_data['tweets'].apply(preprocess_text)
+    test_data['processed_tweets'] = test_data['tweets'].apply(preprocess_text)
+
+    X = train_data['tweets']
+    y = train_data['class']
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2), max_features=5000)
+    X_train_tfidf = vectorizer.fit_transform(X_train)
+    X_val_tfidf = vectorizer.transform(X_val)
+    
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train_tfidf, y_train)
+
+    # Save preprocessed data
+    with open(TRAIN_DATA_PICKLE, 'wb') as f:
+        pickle.dump(train_data, f)
+    with open(TEST_DATA_PICKLE, 'wb') as f:
+        pickle.dump(test_data, f)
+    with open(VECTORIZER_PICKLE, 'wb') as f:
+        pickle.dump(vectorizer, f)
+    with open(MODEL_PICKLE, 'wb') as f:
+        pickle.dump(model, f)
+    with open(XVAL_PICKLE, 'wb') as f:
+        pickle.dump(X_val, f)
+    with open(YVAL_PICKLE, 'wb') as f:
+        pickle.dump(y_val, f)
+    with open(XVALTFIDF_PICKLE, 'wb') as f:
+        pickle.dump(X_val_tfidf, f)
+
+combined_data = pd.concat([train_data.assign(dataset='train'), test_data.assign(dataset='test')])
 
 with st.sidebar:
     selected = option_menu(
@@ -156,6 +209,7 @@ elif selected == "Result":
     st.dataframe(test_data[['tweets', 'predicted_class']].head(20))
 
     st.subheader("Distribusi Hasil Prediksi pada Data Uji")
+    st.divider()
     fig_pred, ax_pred = plt.subplots()
     sns.countplot(x='predicted_class', data=test_data, order=test_data['predicted_class'].value_counts().index, ax=ax_pred)
     st.pyplot(fig_pred)
