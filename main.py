@@ -18,9 +18,15 @@ import os
 
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('wordnet')
+def safe_nltk_download(resource):
+    try:
+        nltk.data.find(resource)
+    except LookupError:
+        nltk.download(resource.split('/')[-1])
+
+safe_nltk_download('tokenizers/punkt')
+safe_nltk_download('corpora/stopwords')
+safe_nltk_download('corpora/wordnet')
 
 # Define paths for pickle files
 PICKLE_DIR = './pickle_files'
